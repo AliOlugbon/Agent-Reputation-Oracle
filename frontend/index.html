@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0"
+    />
+    <title>Agent Reputation Oracle</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <!-- ── Header ── -->
+      <header>
+        <div class="logo">
+          <div class="logo-hex">⬡</div>
+          <div>
+            <div class="logo-text">Rep Oracle</div>
+            <div class="logo-sub">ERC-8004 · Celo</div>
+          </div>
+        </div>
+        <span class="chain-badge">Celo Mainnet</span>
+      </header>
+
+      <!-- ── Wallet strip ── -->
+      <div id="wallet-strip">
+        <div class="wallet-dot" id="wallet-dot"></div>
+        <span id="wallet-addr">Not connected</span>
+        <span id="cusd-bal"></span>
+        <button id="connect-btn" onclick="connectWallet()">Connect</button>
+      </div>
+
+      <!-- ── Live status bar ── -->
+      <div class="feed-statusbar">
+        <span id="feed-status"></span>
+        <span style="color: var(--muted)">Auto-refresh 15s</span>
+      </div>
+
+      <!-- ── Top tabs ── -->
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('lookup', this)">
+          Lookup
+        </button>
+        <button class="tab" onclick="switchTab('submit', this)">Review</button>
+        <button class="tab" onclick="switchTab('register', this)">
+          Register
+        </button>
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════
+       PANEL: LOOKUP / MARKETPLACE
+  ══════════════════════════════════════════════════════ -->
+      <div class="panel active" id="panel-lookup">
+        <div class="search-wrap">
+          <input
+            type="text"
+            id="lookup-input"
+            placeholder="0x… search by address or name"
+            oninput="filterAgents(this.value)"
+          />
+          <button
+            class="search-btn"
+            onclick="lookupAgent()"
+            title="Lookup exact address"
+          >
+            →
+          </button>
+        </div>
+
+        <!-- Detail view (hidden until an agent is selected) -->
+        <div id="score-result" style="display: none"></div>
+
+        <!-- Live agent feed -->
+        <div id="agents-feed">
+          <div class="section-title">Live Marketplace</div>
+          <div id="agents-list">
+            <div class="empty-state">
+              <span class="spinner"></span>
+              <div style="margin-top: 14px">Loading agents from chain…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- /panel-lookup -->
+
+      <!-- ══════════════════════════════════════════════════════
+       PANEL: SUBMIT REVIEW
+  ══════════════════════════════════════════════════════ -->
+      <div class="panel" id="panel-submit">
+        <div class="section-title" style="margin-top: 20px">Submit Review</div>
+
+        <div class="info-card">
+          <div class="form-group">
+            <label class="form-label" for="fb-agent">Agent Address</label>
+            <input
+              type="text"
+              id="fb-agent"
+              class="form-input"
+              placeholder="0x…"
+            />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="fb-score">Reputation Score</label>
+            <div class="score-slider-wrap">
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value="75"
+                id="fb-score"
+                oninput="updateSliderColor(this)"
+              />
+              <span class="slider-val" id="fb-score-display">75</span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="fb-tag">Capability Tag</label>
+            <select class="form-select" id="fb-tag">
+              <option value="defi_trading">📈 DeFi Trading Agent</option>
+              <option value="nft_valuation">🖼 NFT Valuation Agent</option>
+              <option value="governance">🗳 Governance Voting Agent</option>
+              <option value="bridge">🌉 Cross-Chain Bridge Agent</option>
+              <option value="prediction">🔮 Prediction Market Agent</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="fb-comment"
+              >Comment (optional)</label
+            >
+            <textarea
+              class="form-textarea"
+              id="fb-comment"
+              placeholder="Describe the agent's performance…"
+            ></textarea>
+          </div>
+
+          <!--
+        What happens on submit:
+        1. getReviewerNonce() → on-chain nonce
+        2. eth_signTypedData_v4 → EIP-712 Feedback signature
+        3. ReputationLedger.submitFeedback(agent, score, tag, comment, sig)
+           → legacy tx, feeCurrency = cUSD (MiniPay fee abstraction)
+      -->
+          <button
+            class="btn-primary"
+            id="fb-submit-btn"
+            onclick="submitFeedback()"
+          >
+            Sign &amp; Submit Review
+          </button>
+          <button
+            class="btn-secondary"
+            onclick="switchTab('lookup', document.querySelector('.tab'))"
+          >
+            ← Back to Marketplace
+          </button>
+        </div>
+      </div>
+      <!-- /panel-submit -->
+
+      <!-- ══════════════════════════════════════════════════════
+       PANEL: REGISTER AGENT
+  ══════════════════════════════════════════════════════ -->
+      <div class="panel" id="panel-register">
+        <div class="section-title" style="margin-top: 20px">Register Agent</div>
+
+        <div class="info-card">
+          <!--
+        MiniPay phone-number registration:
+        MiniPay maps phone numbers to wallet addresses via SocialConnect.
+        Enter a phone number → resolve button → fills address field.
+      -->
+          <div class="form-group">
+            <label class="form-label" for="reg-phone"
+              >Phone Number (MiniPay)</label
+            >
+            <div class="phone-row">
+              <input
+                type="tel"
+                id="reg-phone"
+                class="form-input"
+                placeholder="+1 234 567 8900"
+              />
+              <button class="resolve-btn" onclick="resolvePhone()">
+                Resolve
+              </button>
+            </div>
+            <div style="font-size: 10px; color: var(--muted); margin-top: 5px">
+              Resolves to a Celo address via SocialConnect
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="reg-agent">Agent Address</label>
+            <input
+              type="text"
+              id="reg-agent"
+              class="form-input"
+              placeholder="0x… (auto-filled from phone or wallet)"
+            />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="reg-meta">Metadata</label>
+            <input
+              type="text"
+              id="reg-meta"
+              class="form-input"
+              placeholder='{"name":"My Agent","emoji":"🤖"} or ipfs://Qm…'
+            />
+            <div style="font-size: 10px; color: var(--muted); margin-top: 5px">
+              JSON with name/emoji, or an IPFS URI
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="reg-stake"
+              >Stake Amount (cUSD)</label
+            >
+            <input
+              type="number"
+              id="reg-stake"
+              class="form-input"
+              placeholder="Min 10 cUSD"
+              min="10"
+              step="1"
+            />
+            <div style="font-size: 10px; color: var(--muted); margin-top: 5px">
+              Staking cUSD increases your Oracle score by 10%
+            </div>
+          </div>
+
+          <!--
+        On submit:
+        1. cUSD.approve(StakingVault, amount) — legacy tx
+        2. AgentRegistry.registerAgent(agent, metadata) — legacy tx
+        3. StakingVault.stake(amount) — legacy tx
+        All txs use feeCurrency = cUSD (MiniPay fee abstraction)
+      -->
+          <button
+            class="btn-primary"
+            id="reg-submit-btn"
+            onclick="registerAgent()"
+          >
+            Register &amp; Stake
+          </button>
+        </div>
+
+        <!-- My agents section -->
+        <div class="section-title">My Agents</div>
+        <div id="my-agents-list">
+          <div class="empty-state">
+            <div class="empty-icon">🤖</div>
+            <div>Connect wallet to see your agents</div>
+          </div>
+        </div>
+
+        <!-- Deployed contract addresses -->
+        <div class="section-title">Contracts on Celo</div>
+        <div class="info-card">
+          <div id="contract-rows"></div>
+        </div>
+      </div>
+      <!-- /panel-register -->
+    </div>
+    <!-- /app -->
+
+    <!-- ── Bottom navigation ── -->
+    <nav class="bottom-nav">
+      <button
+        class="nav-item active"
+        id="nav-lookup"
+        onclick="switchTab('lookup', this, 'nav')"
+      >
+        <span class="nav-icon">🏪</span>
+        Market
+      </button>
+      <button
+        class="nav-item"
+        id="nav-submit"
+        onclick="switchTab('submit', this, 'nav')"
+      >
+        <span class="nav-icon">✍️</span>
+        Review
+      </button>
+      <button
+        class="nav-item"
+        id="nav-register"
+        onclick="switchTab('register', this, 'nav')"
+      >
+        <span class="nav-icon">➕</span>
+        Register
+      </button>
+    </nav>
+
+    <!-- ── Toast ── -->
+    <div id="toast"></div>
+
+    <!--
+  app.js uses ES module dynamic imports (viem via esm.sh CDN).
+  type="module" is required so top-level await works and
+  import() is available. All global functions are attached to window.
+-->
+    <script src="app.js"></script>
+    <!-- <script type="module" src="app.js"></script> -->
+  </body>
+</html>

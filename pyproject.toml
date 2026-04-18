@@ -1,0 +1,27 @@
+[project]
+name = "moccasin_project"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.moccasin.project]
+src   = "src"
+
+[tool.moccasin.networks.celo-mainnet]
+url      = "https://forno.celo.org"
+chain_id = 42220
+default_account_name = "deployer1"
+# default_account = { keystore = "~/.moccasin/keystore/deployer.json" }
+
+[tool.moccasin.networks.celo-alfajores]
+url      = "https://alfajores-forno.celo-testnet.org"
+chain_id = 44787
+default_account = { keystore = "~/.moccasin/keystore/deployer.json" }
+
+[tool.moccasin.contracts.AgentReputationOracle]
+path = "src/AgentReputationOracle.vy"
+deployer_script = "script/deploy.py"
+
+# You can view all configuration options at https://cyfrin.github.io/moccasin/all_moccasin_toml_parameters.html
